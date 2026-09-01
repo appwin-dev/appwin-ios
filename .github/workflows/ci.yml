@@ -1,0 +1,23 @@
+name: CI
+
+# Validation du paquet Swift (SPM). Runner macOS : 10x le prix à la
+# minute - déclenché seulement sur push main et PR, repo à faible trafic.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Swift build
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (SPM)
+        run: swift build
