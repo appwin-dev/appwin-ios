@@ -1,0 +1,54 @@
+name: CI
+
+# This file lives in the monorepo under `sdk/appwin-ios/`, and runs only in the
+# published mirror. GitHub reads workflows from the repository root alone, so it
+# is inert where it is written and active once `sdk/scripts/release.mjs` copies
+# the folder to appwin-dev/appwin-ios. Editing it here is what keeps the mirror's
+# CI from being wiped: the release script republishes each mirror from a fresh
+# history, so anything committed on the far side does not survive a release.
+
+on:
+  # Callable as the gate of publish.yml: the registry push waits for green.
+  workflow_call:
+  workflow_dispatch:
+  # No push trigger: a mirror's main only moves at release time, and the
+  # Publish workflow already runs this file as its gate - running it twice
+  # per release burns runner time for nothing.
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # `xcodebuild` rather than `swift build`: the package declares
+      # `platforms: [.iOS(.v16)]`, so SwiftPM refuses to compile it for macOS.
+      - name: Build the four products
+        run: |
+          for scheme in AppwinCore AppwinSupport AppwinCommunity AppwinNotifications; do
+            xcodebuild -scheme "$scheme" -destination 'generic/platform=iOS' build
+          done
+
+      # The available devices follow the runner's Xcode image, so one is looked
+      # up instead of named: a hard-coded "iPhone 16" fails the day the image
+      # moves, on a build that is otherwise fine.
+      - name: Resolve a simulator
+        id: sim
+        run: |
+          udid=$(xcrun simctl list devices available -j \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for v in d.values() for x in v if x['name'].startswith('iPhone')))")
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      # One run, not four: the per-product schemes of a multi-product package
+      # carry no test action. `Appwin-Package` is the aggregate scheme SwiftPM
+      # generates, and it holds the four test targets.
+      - name: Tests
+        run: |
+          xcodebuild test -scheme Appwin-Package \
+            -destination "platform=iOS Simulator,id=${{ steps.sim.outputs.udid }}"
