@@ -1,0 +1,28 @@
+name: Publish
+
+# This file lives in the monorepo under `sdk/appwin-ios/` and runs only in the
+# published mirror (same travel mechanism as ci.yml). It fires on the release
+# tag that `sdk/scripts/release.mjs --push` creates.
+#
+# Swift Package Manager is the only channel: the tag IS the publication, SPM
+# reads the package from this repository at that tag. Nothing is pushed to a
+# registry. CocoaPods trunk is read-only from 2026-12-02, so the podspecs stay
+# in the repository (the monorepo's showcases take them by `:path`) but are no
+# longer published; the versions already on trunk stay installable. The
+# Flutter plugins and the React Native bridge do not depend on trunk either:
+# cf. their podspecs.
+#
+# What is left is the check that the tagged package builds, so a broken tag is
+# seen in this repository's Actions rather than in a studio's Xcode.
+
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
